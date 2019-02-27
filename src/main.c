@@ -18,7 +18,7 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
-
+#include <shared.h>
 /*
  * Detected on rising edge of RESET GPIO.
  * Low = Run app from ROM
@@ -58,7 +58,7 @@ static int screen_initialize(int skip_reset) {
     mask_memory_byte(0x1800c1c1, 0xf0, 0); /* Enable UART2 in DMU */
 
     if (!skip_reset) {
-        if (gpio_export(SCREEN_BOOT_MODE_GPIO) == FAILURE ||
+        /*if (gpio_export(SCREEN_BOOT_MODE_GPIO) == FAILURE ||
             gpio_export(SCREEN_RESET_GPIO) == FAILURE) {
             syslog(LOG_ERR, "Could not export GPIOs\n");
             return FAILURE;
@@ -75,9 +75,14 @@ static int screen_initialize(int skip_reset) {
             gpio_set_value(SCREEN_RESET_GPIO, 1) == FAILURE) {
             syslog(LOG_ERR, "Could not reset screen\n");
             return FAILURE;
-        }
-    }
-
+        }*/
+		if (set_gpio(SCREEN_BOOT_MODE_GPIO, 0) == FAILURE ||
+			set_gpio(SCREEN_RESET_GPIO, 0) == FAILURE ||
+			set_gpio(SCREEN_RESET_GPIO, 1) == FAILURE) {
+			syslog(LOG_ERR, "Could not reset screen\n");
+			return FAILURE;
+		}
+	}
     return SUCCESS;
 }
 

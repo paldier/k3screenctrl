@@ -30,6 +30,7 @@ typedef enum _request_type {
     REQUEST_UPDATE_WIFI,
     REQUEST_UPDATE_HOSTS_PAGED,
     REQUEST_UPDATE_BASIC_INFO,
+    REQUEST_UPDATE_WEATHER,
     REQUEST_NOTIFY_EVENT
 } REQUEST_TYPE;
 
@@ -80,11 +81,12 @@ typedef enum _page {
     PAGE_PORTS,
     PAGE_WAN,
     PAGE_WIFI,
-    PAGE_HOSTS
+    PAGE_HOSTS,
+    PAGE_WEATHER
 } PAGE;
 
 #define PAGE_MIN PAGE_BASIC_INFO
-#define PAGE_MAX PAGE_HOSTS
+#define PAGE_MAX PAGE_WEATHER
 
 /* REQUEST_UPDATE_PORTS */
 typedef struct _port_info {
@@ -142,7 +144,19 @@ typedef struct _basic_info {
     char product_name[8];
     char hw_version[8];
     char fw_version[24];
+    char sw_version[24];
     char mac_addr_base[18];
 } BASIC_INFO;
+
+/* REQUEST_UPDATE_WEATHER */
+typedef struct _weather_info {
+    char city[32]; // city
+    char temp[4]; // temp
+    char date[11]; // date
+    char time[6]; // time
+    unsigned char weather; // weather_code
+    unsigned char week; //0 1 2 3 4 5 6
+    unsigned char error; //0
+} WEATHER_INFO;
 
 #endif

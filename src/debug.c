@@ -45,9 +45,10 @@ void print_basic_info(BASIC_INFO *info) {
            "  Product Name = %s\n"
            "  HW Version = %s\n"
            "  FW Version = %s\n"
+           "  SW Version = %s\n"
            "  MAC Address = %s\n",
            info, info->product_name, info->hw_version, info->fw_version,
-           info->mac_addr_base);
+           info->sw_version, info->mac_addr_base);
 }
 
 void print_host_info(struct _host_info_single *info, int len) {
@@ -62,9 +63,21 @@ void print_host_info(struct _host_info_single *info, int len) {
     }
 }
 
+void print_weather_info(WEATHER_INFO *info) {
+        printf("WEATHER_INFO at %p:\n"
+               "  city = %s\n"
+               "  temp = %s\n"
+               "  date = %s\n"
+               "  time = %s\n"
+               "  weather = %hhu\n"
+               "  week = %hhu\n"
+               "  error = %hhu\n",
+               info, info->city, info->temp,
+               info->date, info->time, info->weather, info->week, info->error);
+}
+
 static void print_buf(const unsigned char *buf, int len) {
     printf("RCVD %d bytes\n", len);
-
     for (int i = 0; i < len; i++) {
         printf("0x%hhx ", buf[i]);
     }

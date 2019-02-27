@@ -1,24 +1,19 @@
 #!/bin/sh
-. /etc/os-release
-
-# PRODUCT_NAME_FULL=$(cat /etc/board.json | jsonfilter -e "@.model.name")
-# PRODUCT_NAME=${PRODUCT_NAME_FULL#* } # Remove first word to save space
-PRODUCT_NAME=${LEDE_DEVICE_PRODUCT}
-
-# WAN_IFNAME=$(uci get network.wan.ifname)
-MAC_ADDR=$(cat /tmp/k3screenctrl/macaddr)
-
-HW_VERSION=${LEDE_DEVICE_REVISION:0:2}
-FW_VERSION=$(cat /etc/openwrt_version)
-
-echo $PRODUCT_NAME
-
-if [ $(uci get k3screenctrl.general.cputemp) -eq 1 ]; then
-    CPU_TEMP=$(($(cat /sys/class/thermal/thermal_zone0/temp) / 1000))
-    echo $HW_VERSION $CPU_TEMP
+if [ -n `nvram get et2macaddr` ]; then
+    MAC_ADDR=$(nvram get et2macaddr)
 else
-    echo $HW_VERSION
+    MAC_ADDR=$(nvram get k3macaddr)
 fi
-
-echo $FW_VERSION
+BUILD_NO=`nvram get buildno`
+EXTEND_NO=`nvram get extendno`
+swmode=`nvram get sw_mode`
+if [ "$swmode" == "1" ]; then
+FW_VERSION="$BUILD_NO"_"$EXTEND_NO"
+else
+FW_VERSION=AP:$(nvram get lan_ipaddr)
+fi
+echo K3
+echo A1/A2
+echo ${FW_VERSION}
 echo $MAC_ADDR
+

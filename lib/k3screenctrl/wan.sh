@@ -1,13 +1,11 @@
 #!/bin/sh
 
-# Basic vars
-TEMP_FILE="/tmp/k3screenctrl/wan_speed"
-WAN_STAT=`ifstatus wan`
-WAN6_STAT=`ifstatus wan6`
+TEMP_FILE="/tmp/wan_speed_temp"
+WAN_STAT=`nvram get wan0_ipaddr`
+WAN6_STAT=`nvram get ipv6_ipaddr`
 
-# Internet connectivity
-IPV4_ADDR=`echo $WAN_STAT | jsonfilter -e "@['ipv4-address']"`
-IPV6_ADDR=`echo $WAN6_STAT | jsonfilter -e "@['ipv6-address']"`
+[ "$WAN_STAT" != "0.0.0.0" ] && IPV4_ADDR="$WAN_STAT"
+[ "$WAN6_STAT" != "" ] && IPV6_ADDR="$WAN6_STAT"
 
 if [ -n "$IPV4_ADDR" -o -n "$IPV6_ADDR" ]; then
     CONNECTED=1
@@ -15,18 +13,14 @@ else
     CONNECTED=0
 fi
 
-WAN_IFNAME=`echo $WAN_STAT | jsonfilter -e "@.l3_device"` # pppoe-wan
+WAN_IFNAME=`nvram get wan_pppoe_ifname`
 if [ -z "$WAN_IFNAME" ]; then
-    WAN_IFNAME=`echo $WAN_STAT | jsonfilter -e "@.device"` # eth0.2
-    if [ -z "$WAN_IFNAME" ]; then
-        WAN_IFNAME=`uci get network.wan.ifname` # eth0.2
-    fi
+    WAN_IFNAME=`nvram get wan_ifname`
+	if [ -z "$WAN_IFNAME" ]; then
+		WAN_IFNAME=`nvram get wan0_ifname`
+	fi
 fi
-# If there is still no WAN iface found, the script will fail - but that's rare
 
-# Calculate speed by traffic delta / time delta
-# NOTE: /proc/net/dev updates every ~1s.
-# You must call this script with longer interval!
 CURR_TIME=$(date +%s)
 CURR_STAT=$(cat /proc/net/dev | grep $WAN_IFNAME | sed -e 's/^ *//' -e 's/  */ /g')
 CURR_DOWNLOAD_BYTES=$(echo $CURR_STAT | cut -d " " -f 2)
@@ -57,7 +51,6 @@ echo $CURR_UPLOAD_BYTES >> $TEMP_FILE
 echo $CURR_DOWNLOAD_BYTES >> $TEMP_FILE
 
 if [ -z "$LAST_TIME" -o -z "$LAST_UPLOAD_BYTES" -o -z "$LAST_DOWNLOAD_BYTES" ]; then
-    # First time of launch
     UPLOAD_BPS=0
     DOWNLOAD_BPS=0
 else

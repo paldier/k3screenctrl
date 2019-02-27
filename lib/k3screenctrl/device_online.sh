@@ -8,7 +8,7 @@ if [ $# -eq 0 ]; then
     }
     echo $$ > $pid_file
     # device_list=$(grep -w br-lan /proc/net/arp | grep -w 192.168 | awk '{print $1}')
-    device_list=$(cat $(uci get dhcp.@dnsmasq[0].leasefile) | grep $(uci get network.lan.ipaddr | awk -F . '{print $1"."$2"."$3"."}') | awk '{print $3}')
+    device_list=$(cat /var/lib/misc/dnsmasq.leases | grep $(nvram get lan_ipaddr | awk -F . '{print $1"."$2"."$3"."}') | awk '{print $3}')
     [ -s $file ] || {
         for device in $device_list
         do
