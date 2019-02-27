@@ -59,7 +59,7 @@ void frame_set_received_callback(void (*func)(const unsigned char *, int)) {
 }
 
 static void frame_notify_received(const unsigned char *frame_buf, int len) {
-    unsigned char frame[2048];
+    unsigned char frame[4096];
     unsigned char frame_pos = 0;
 
     /* Unescape */
@@ -107,7 +107,7 @@ static void frame_notify_received(const unsigned char *frame_buf, int len) {
 }
 
 void frame_notify_serial_recv() {
-    static unsigned char g_serial_recv_buf[2048];
+    static unsigned char g_serial_recv_buf[4096];
     static int g_recv_buf_pos = 0;
 
     /* Read into this buffer */
