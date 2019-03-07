@@ -9,34 +9,8 @@ if [ -n "$IPV4_ADDR" -o -n "$IPV6_ADDR" ]; then
 else
     CONNECTED=0
 fi
-WAN_IFNAME=`nvram get wan_pppoe_ifname`
-if [ -z "$WAN_IFNAME" ]; then
-    WAN_IFNAME=`nvram get wan0_ifname`
-	if [ -z "$WAN_IFNAME" ]; then
-		WAN_IFNAME=`nvram get wan_ifname`
-	fi
-fi
-CURR_TIME=$(date +%s)
-CURR_STAT=$(cat /proc/net/dev | grep $WAN_IFNAME | sed -e 's/^ *//' -e 's/  */ /g')
-CURR_DOWNLOAD_BYTES=$(echo $CURR_STAT | cut -d " " -f 2)
-CURR_UPLOAD_BYTES=$(echo $CURR_STAT | cut -d " " -f 10)
-[ -f "/lib/k3screenctrl/lasttime" ] && LAST_TIME=`cat /lib/k3screenctrl/lasttime`
-[ -f "/lib/k3screenctrl/lastup" ] && LAST_UPLOAD_BYTES=`cat /tmp/k3screenctrl/lastup`
-[ -f "/lib/k3screenctrl/lastdown" ] && LAST_DOWNLOAD_BYTES=`cat /tmp/k3screenctrl/lastdown`
-if [ -z "$LAST_TIME" -o -z "$LAST_UPLOAD_BYTES" -o -z "$LAST_DOWNLOAD_BYTES" ]; then
-    UPLOAD_BPS=0
-    DOWNLOAD_BPS=0
-else
-    TIME_DELTA_S=$(($CURR_TIME-$LAST_TIME))
-    if [ $TIME_DELTA_S -eq 0 ]; then
-        TIME_DELTA_S=1
-    fi
-    UPLOAD_BPS=$((($CURR_UPLOAD_BYTES-$LAST_UPLOAD_BYTES)/$TIME_DELTA_S))
-    DOWNLOAD_BPS=$((($CURR_DOWNLOAD_BYTES-$LAST_DOWNLOAD_BYTES)/$TIME_DELTA_S))
-fi
-echo $CURR_TIME > /tmp/k3screenctrl/lasttime
-echo $CURR_UPLOAD_BYTES > /tmp/k3screenctrl/lastup
-echo $CURR_DOWNLOAD_BYTES > /tmp/k3screenctrl/lastdown
+UPLOAD_BPS=`cat /tmp/k3screenctrl/upspeed`
+DOWNLOAD_BPS=`cat /tmp/k3screenctrl/downspeed`
 echo $CONNECTED
 echo $UPLOAD_BPS
 echo $DOWNLOAD_BPS

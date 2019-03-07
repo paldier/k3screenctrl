@@ -15,5 +15,6 @@ fi
 echo K3
 echo A1/A2
 echo ${FW_VERSION}
+echo ${FW_VERSION}
 echo $MAC_ADDR
 

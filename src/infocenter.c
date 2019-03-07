@@ -109,7 +109,6 @@ static int update_storage_from_script(const char *script,
     if (out == NULL) {
         return FAILURE;
     }
-
     /* If the tokenizer stopped at \0, the entire output should have been
      * procesed successfully.
      * If it did not (there is something left in the output), the output may
@@ -278,14 +277,14 @@ int update_page_info(PAGE page) {
     case PAGE_WAN:
         updater = update_wan_info;
         break;
+    case PAGE_WEATHER:
+        updater = update_weather_info;
+        break;
     case PAGE_WIFI:
         updater = update_wifi_info;
         break;
     case PAGE_HOSTS:
         updater = update_host_info;
-        break;
-    case PAGE_WEATHER:
-        updater = update_weather_info;
         break;
     }
 

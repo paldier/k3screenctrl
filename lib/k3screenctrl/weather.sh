@@ -12,22 +12,15 @@ get_json_value()
   echo ${value}
 }
 week=$(date +%w)
-data=$(date +%Y-%m-%d)
-time=$(date +%H:%m)
-[ -e "/lib/k3screenctrl/time" ] || echo $(($(date +%s)+7200)) > /lib/k3screenctrl/time
-starttime=`cat /lib/k3screenctrl/time`
-[ ! -f "/lib/k3screenctrl/http" -o $(date +%s) -ge $starttime ] && json=`curl -s "https://api.seniverse.com/v3/weather/now.json?key=xxxxxxxxxxxxxx&location=ip&language=zh-Hans&unit=c"` && echo $json > /lib/k3screenctrl/http && echo $(($(date +%s)+7200)) > /lib/k3screenctrl/time
-#set your key
-if [ -n "$(echo $json | grep AP010003)" ]; then
-city=北京
-temp=11
-code=0
-else
+data=`cat /lib/k3screenctrl/date`
+time=`cat /lib/k3screenctrl/time`
+[ -f "/lib/k3screenctrl/starttime" ] || echo $(($(date +%s -d $time)+7200)) > /lib/k3screenctrl/starttime
+starttime=`cat /lib/k3screenctrl/starttime`
+[ ! -f "/lib/k3screenctrl/http" -o $(date +%s -d $time) -ge $starttime ] && json=`curl -s "https://api.seniverse.com/v3/weather/now.json?key=5fjwjirm6bzk95rx&location=ip&language=zh-Hans&unit=c"` && echo $json > /lib/k3screenctrl/http && echo $(($(date +%s -d $time)+7200)) > /lib/k3screenctrl/starttime
 http=`cat /lib/k3screenctrl/http`
 city=`get_json_value "$http" name`
 temp=`get_json_value "$http" temperature`
 code=`get_json_value "$http" code`
-fi
 echo $city
 echo $temp
 echo $data
