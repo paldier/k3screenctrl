@@ -5,9 +5,9 @@ eval $(/usr/sbin/robocfg show 2>/dev/null | awk 'NR==2,NR==5{printf $3" "}' | aw
   [ "$LAN1" = "DOWN" ] && LAN1="0" || LAN1="1"
   [ "$LAN3" = "DOWN" ] && LAN3="0" || LAN3="1"
   [ "$WAN1" = "DOWN" ] && WAN1="0" || WAN1="1"
-
+[ "$(lsusb | wc -l)" -gt 2 ] && USB="1" || USB="0"
 echo $LAN1
 echo $LAN2
 echo $LAN3
 echo $WAN1
-echo 0
+echo $USB
