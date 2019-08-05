@@ -1,6 +1,7 @@
 #include <stdio.h>
 
 #include "mcu_proto.h"
+#include "requests.h"
 
 void print_port_info(PORT_INFO *info) {
     printf("PORT_INFO at %p:\n"
@@ -85,4 +86,8 @@ static void print_buf(const unsigned char *buf, int len) {
         printf("0x%hhx ", buf[i]);
     }
     printf("\n");
+}
+void print_mcu_version(){
+    int ver=request_mcu_version();
+    printf("MCU_VERSION:%x\n",ver);
 }
