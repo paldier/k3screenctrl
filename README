@@ -1,3 +1,5 @@
+因为程序默认是用在openwrt上的，寄存器操作也是针对openwrt的，在bcm sdk里这个操作是有问题的，会造成reset按钮电平被无限拉低且不可拉高，修复这个问题，同时更换为sdk的gpio设置方式
+
 merlin:
 makefile
 k3screenctrl/Makefile:
