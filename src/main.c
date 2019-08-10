@@ -19,14 +19,16 @@
 #include <string.h>
 #include <syslog.h>
 #include <unistd.h>
+#if defined(BCMARM)
+#include <shared.h>
+#endif
 
 static void frame_handler(const unsigned char *frame, int len) {
-    if (frame[0] != FRAME_APP && frame[0] != FRAME_BL_MCU_VERSION_REQ) {
+    if (frame[0] != FRAME_APP) {
         syslog(LOG_WARNING, "frame with unknown type received: %hhx\n",
                frame[0]);
         return;
     }
-
     extern RESPONSE_HANDLER g_response_handlers[];
     for (RESPONSE_HANDLER *handler = &g_response_handlers[0]; handler != NULL;
          handler++) {
@@ -50,9 +52,9 @@ static int screen_initialize(int skip_reset, int enter_dfu) {
 #endif
     if (!skip_reset) {
 #if defined(BCMARM)
-		if (bcm_set_gpio(SCREEN_BOOT_MODE_GPIO, boot_gpio) == FAILURE ||
-			bcm_set_gpio(SCREEN_RESET_GPIO, 0) == FAILURE ||
-			bcm_set_gpio(SCREEN_RESET_GPIO, 1) == FAILURE) {
+		if (set_gpio(SCREEN_BOOT_MODE_GPIO, boot_gpio) == FAILURE ||
+			set_gpio(SCREEN_RESET_GPIO, 0) == FAILURE ||
+			set_gpio(SCREEN_RESET_GPIO, 1) == FAILURE) {
 			syslog(LOG_ERR, "Could not reset screen\n");
 			return FAILURE;
 		}

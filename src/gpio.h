@@ -1,10 +1,7 @@
 #ifndef _GPIO_H
 #define _GPIO_H
 
-#if defined(BCMARM)
-#include <stdint.h>
-extern uint32_t bcm_set_gpio(uint32_t gpio, uint32_t value);
-#else
+#if !defined(BCMARM)
 typedef enum _gpio_dir { GPIO_IN, GPIO_OUT } GPIO_DIRECTION;
 int gpio_export(int gpio);
 int gpio_unexport(int gpio);
