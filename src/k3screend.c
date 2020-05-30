@@ -1,9 +1,3 @@
-/*
-* 作者：杨志永
-* 日期：2012-04-17 10:10 
-* Email:ljy520zhiyong@163.com
-* 修改：paldier
-*/
 #include <stdio.h>
 #include <string.h>
 #include <sys/types.h>
@@ -15,6 +9,9 @@
 #include <signal.h>
 #include <sys/stat.h>
 #include <sys/socket.h>
+#include <sys/sysinfo.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
 #include <netinet/in.h> 
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -23,10 +20,25 @@
 #include <netinet/ip_icmp.h>
 #include <netinet/ip.h>
 #include <netdb.h>
-#define BUFFER 1024
-#define SECOND 1
-char arpbuffer[BUFFER];
-int swmode;
+#include <curl/curl.h>
+#include <json.h>
+#include <typedefs.h>
+#include <bcmutils.h>
+#include <shutils.h>
+#include <bcmnvram.h>
+#include "bcmnvram_f.h"
+#include <shared.h>
+#include <rtstate.h>
+#include <wlioctl.h>
+#include <wlutils.h>
+
+#define SI_WL_QUERY_ASSOC 1
+#define SI_WL_QUERY_AUTHE 2
+#define SI_WL_QUERY_AUTHO 3
+
+static struct itimerval itv;
+char arpbuffer[4096];
+int swmode, timer, timers;
 //0=default
 char deflogo[]="";
 char OnePlus[] ="C0EEFB,94652D";
@@ -59,45 +71,74 @@ char Microsoft[] ="38F23E,38256B,B4E1C4,300D43,6C2779,607EDD,6C8FB5,6C2483,A4516
 char XiaoMi[] ="2047DA,286C07,3CBD3E,9C99A0,185936,98FAE3,640980,8CBEBE,F8A45F,28E31F,0C1DAF,14F65A,742344,F0B429,D4970B,64CC2E,B0E235,38A4ED,F48B32,009EC8,ACF7F3,102AB3,584498,A086C6,7C1DD9,ACC1EE,7802F8,68DFDD,C46AB7,FC64BA,2082C0,3480B3,7451BA,64B473,C40BCB";
 char ZTE[] ="74A78E,84742A,681AB2,6CA75F,709F2D,EC1D7F,34DE34,4CCBF5,78E8B6,B49842,8CE081,DC028E,48282F,343759,B805AB,74B57E,540955,981333,F8A34F,C87B5B,98F537,001E73,0019C6,0015EB,98F428,54BE53,300C23,1844E6,38D82F,D87495,344DEA,2C957F,146080,986CF5,CC7B35,F8DFA8,34E0CF,D476EA,789682,749781,E07C13,689FF0,18686A,344B50,FCC897,9CD24B,C864C7,D0154A,AC6462,F4B8A7,90D8F3,78312B,A47E39,A8A668,0C1262,A0EC80,E0C3F3,F46DE2,C4A366,24C44A,D058A8,D071C4,601888,4CAC0A,0026ED,002293,346987,44F436,D05BA8,D437D7,EC8A4C,208986,9CA9E4,E47723,6C8B2F,CC1AFA,F084C9,2C26C5,083FBC,6073BC,D0608C,688AF0,004A77,384608,B4B362,B075D5,08181A,002512,143EBF,94A7B7,3CDA2A,8C7967,D855A3,4C16F1,5422F8,901D27,30F31D,4C09B4,744AA4,10D0AB,90C7D8,FC2D5E,8CE117,64136C,A091C8,702E22,F41F88,78C1A7";
 char *logo[]={deflogo,OnePlus,shu360,Asus,Coolpad,Dell,Haier,Hasee,Honor,HP,HTC,Huawei,Apple,Lenovo,LeEco,LG,Meitu,Meizu,OPPO,Phicomm,Samsung,Smartisan,Sony,TCL,ThinkPad,TongfangPC,VIVO,Microsoft,XiaoMi,ZTE};
-int get_net_work_download_speed(int * download_speed, int * upload_speed, char * download_type, char * upload_type);
+uint32_t traffic_wanlan(char *ifname, uint32_t *rx, uint32_t *tx);
 
-void get_time()
+void wan()
 {
-	time_t tmpcal_ptr;
-	FILE *fptime, *fpdate;
-	struct tm *tmp_ptr = NULL;
-	time(&tmpcal_ptr);
-	tmp_ptr = localtime(&tmpcal_ptr);
-	if (fptime = fopen("/tmp/k3screenctrl/time", "w")){
-		fprintf(fptime, "%02d:%02d\n", tmp_ptr->tm_hour, tmp_ptr->tm_min);
-		fclose(fptime);
+	unsigned long long rx = 0, tx = 0, vlan_rx = 0, vlan_tx = 0;
+	unsigned long long start_rx = 0, end_rx = 0;
+	unsigned long long start_tx = 0, end_tx = 0;
+	unsigned long long result_rx = 0, result_tx = 0;
+	FILE *fp;
+	char buf[2048];
+	char *p, *ifname, IPV4_ADDR;
+	int i, CONNECTED=0, MODE=0;
+	if (swmode == 1) {
+		for (i=0; i<2; i++) {
+			fp = fopen("/proc/net/dev", "r");
+			if (fp) {
+				fgets(buf, sizeof(buf), fp);
+				fgets(buf, sizeof(buf), fp);
+				while (fgets(buf, sizeof(buf), fp)) {
+					if ((p = strchr(buf, ':')) == NULL)
+						continue;
+					*p = 0;
+					if ((ifname = strrchr(buf, ' ')) == NULL)
+						ifname = buf;
+					else
+						++ifname;
+					if (strcmp(ifname, "ppp0") && strcmp(ifname, "eth0") && strcmp(ifname, "vlan2"))
+						continue;
+					sscanf(p + 1, "%llu%*u%*u%*u%*u%*u%*u%*u%llu", &rx, &tx);
+					if(strncmp(ifname, "vlan", 4)==0)
+						traffic_wanlan(ifname, (uint32_t *) &rx, (uint32_t *) &tx);
+					if(nvram_match("wans_dualwan", "wan none")){
+						if(strcmp(ifname, "eth0")==0){
+							traffic_wanlan("vlan2", (uint32_t *) &rx, (uint32_t *) &tx);
+						}
+					}
+					if (i == 0) {
+						start_rx = rx;
+						start_tx = tx;
+						if((start_rx > 0) && (start_tx > 0))
+							break;
+					} else {
+						end_rx = rx;
+						end_tx = tx;
+						if((end_rx > 0) && (end_tx > 0))
+							break;
+					}
+				}
+				fclose(fp);
+			}
+			sleep(2);
+		}
+		result_rx = ((end_rx-start_rx)/2);
+		result_tx = ((end_tx-start_tx)/2);
 	}
-	if (fpdate = fopen("/tmp/k3screenctrl/date", "w")){
-		fprintf(fpdate, "%d-%d-%d\n", (1900+tmp_ptr->tm_year), (1+tmp_ptr->tm_mon), tmp_ptr->tm_mday);
-		fclose(fpdate);
-	}
-}
-void get_speed()
-{
-	int start_download_speed;
-	int end_download_speed;
-	int start_upload_speed;
-	int end_upload_speed;
-	int result_of_download;
-	int result_of_upload;
-	FILE *fpup, *fpdo;
-	get_net_work_download_speed(&start_download_speed, &start_upload_speed, "RX bytes:", "TX bytes:");
-	sleep(SECOND*5);
-	get_net_work_download_speed(&end_download_speed, &end_upload_speed, "RX bytes:", "TX bytes:");
-	result_of_download = ((end_download_speed-start_download_speed)/5);
-	result_of_upload = ((end_upload_speed-start_upload_speed)/5);
-	if (fpup = fopen("/tmp/k3screenctrl/upspeed", "w")){
-		fprintf(fpup, "%d\n", result_of_upload);
-		fclose(fpup);
-	}
-	if (fpdo = fopen("/tmp/k3screenctrl/downspeed", "w")){
-		fprintf(fpdo, "%d\n", result_of_download);
-		fclose(fpdo);
+	if(nvram_get_int("link_internet") == 2)
+		CONNECTED=1;
+	MODE = (swmode == 1 ? 0 : 1);
+	if ((fp = fopen("/tmp/k3screenctrl/wan.sh", "w"))){
+		fchmod(fileno(fp), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fp, "#!/bin/sh\n");
+		fprintf(fp, "echo %d\n", CONNECTED);
+		fprintf(fp, "echo %s\n", nvram_get("wan0_ipaddr"));
+		fprintf(fp, "echo %llu\n", result_tx);
+		fprintf(fp, "echo %llu\n", result_rx);
+		fprintf(fp, "echo 0\n");
+		fprintf(fp, "echo %d\n", MODE);
+		fclose(fp);
 	}
 }
 
@@ -132,9 +173,9 @@ int find_logo(char *mac)
 	}
 	return 0;
 }
-void online()
+void host()
 {
-	FILE *wonline, *ronline, *rip;
+	FILE *fp, *ronline, *rip;
 	struct in_addr addr4;
 	struct in6_addr addr6;
 	char line[256];
@@ -145,13 +186,13 @@ void online()
 	int i, l;
 	i=0;
 	l=0;
-	if(swmode != 1)//not router mode,jump to end
+	if(swmode != 1)//not router mode,go to end
 		goto ONLINEEND;
 	memset(buffer, 0, sizeof(buffer));
 	memset(strTmp, 0, sizeof(strTmp));
 	if (!(rip = fopen("/var/lib/misc/dnsmasq.leases", "r")))
 	{
-		syslog(LOG_WARNING, "K3screend: dnsmasq not run,is it AP mode?\n");
+		//syslog(LOG_WARNING, "K3screend: dnsmasq not run,is it AP mode?\n");
 		//printf("dnsmasq not run\n");
 		goto ONLINEEND;
 	}
@@ -181,105 +222,461 @@ void online()
 			l=find_logo(hwaddr);
 			strcat(buffer, name);
 			//strcat(buffer, "\n0\n0\n0\n");
-			strcat(buffer, "\n0\n0\n");
-			sprintf(strTmp, "%d\n", l);
+			strcat(buffer, "\necho 0\necho 0\n");
+			sprintf(strTmp, "echo %d\n", l);
 			strcat(buffer, strTmp);
 		}
 	}
 	fclose(rip);
 ONLINEEND:
-	if (wonline = fopen("/tmp/k3screenctrl/device_online", "w"))
-	{
-		fprintf(wonline, "%d\n", i);
+	if ((fp = fopen("/tmp/k3screenctrl/host.sh", "w"))){
+		fchmod(fileno(fp), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fp, "#!/bin/sh\n");
+		fprintf(fp, "echo %d\n", i);
 		if (i > 0)
-			fprintf(wonline, "%s", buffer);
-			fprintf(wonline, "0\n");
-	}
-	fclose(wonline);
-}
-int main(int argc, char * argv[])
-{
-	FILE * pip;
-	swmode=nvram_get_int("sw_mode");
-	while (1)
-	{
-		get_speed();
-		get_time();
-		online();
-		sleep(SECOND*2);
-		memset(arpbuffer, 0, sizeof(arpbuffer));
-		if ((pip=popen("cat /proc/net/arp", "r")) == NULL ){
-			syslog(LOG_WARNING, "K3screend: can't open /proc/net/arp\n");
-			continue;//bug?
-		}
-		fread(arpbuffer, 1, sizeof(arpbuffer), pip);
-		pclose(pip);
+			fprintf(fp, "%s", buffer);
+		//fprintf(fp, "echo 0\n");
+		fclose(fp);
 	}
 }
- 
-int get_net_work_download_speed(int * download_speed, int * upload_speed, char * download_type, char * upload_type)
-{
-	FILE * pipo_stream;
-	size_t bytes_read;
-	char buffer[BUFFER];
-	char * match;
-	int wan;
-	if(swmode != 1)//not router mode,jump to end
-		goto GETERR;
-	if ((pipo_stream=popen("ifconfig", "r")) == NULL )
-	{
-		//syslog(LOG_WARNING, "K3screend: not found any wan!\n");
-		//printf("K3SCREEND:not found any wan!\n");//reboot/upgrade? exit
-		//exit(1);
-		goto GETERR;
-	}
-	fread(buffer, 1, sizeof(buffer), pipo_stream);
-	pclose(pipo_stream);
 
-	if (strstr(buffer, "ppp0"))
-		wan=1;
-	else if (strstr(buffer, "vlan2"))
-		wan=2;
-	else if (strstr(buffer, "eth0"))
-		wan=3;
-	else
-		wan=0;
-	if (wan==1)
-		pipo_stream=popen("ifconfig ppp0", "r");
-	else if (wan==2)
-		pipo_stream=popen("ifconfig vlan2", "r");
-	else if (wan==3)
-		pipo_stream=popen("ifconfig eth0", "r");
-	else {
-GETERR:
-		upload_speed=0;
-		download_speed=0;
+size_t getcontentlengthfunc(void *ptr, size_t size, size_t nmemb, void *stream) {
+	int r;
+	long len = 0;
+
+	r = sscanf(ptr, "Content-Length: %ld\n", &len);
+	if (r)
+		*((long *) stream) = len;
+
+	return size * nmemb;
+}
+
+size_t wirtefunc(void *ptr, size_t size, size_t nmemb, void *stream)
+{
+	return fwrite(ptr, size, nmemb, stream);
+}
+
+int curl_download_file(CURL *curlhandle, const char * remotepath, const char * localpath, long timeout, long tries)
+{
+	FILE *f;
+	curl_off_t local_file_len = -1 ;
+	long filesize =0 ;
+
+	CURLcode r = CURLE_GOT_NOTHING;
+	struct stat file_info;
+	int use_resume = 0;
+	if(stat(localpath, &file_info) == 0) 
+	{
+		local_file_len =  file_info.st_size;
+		use_resume  = 1;
+	}
+	f = fopen(localpath, "ab+"); 
+	if (f == NULL) {
+		perror(NULL);
 		return 0;
 	}
-	bytes_read = fread(buffer, 1, sizeof(buffer), pipo_stream);
-	if ( (pclose(pipo_stream)) != 0 )
-	{
-		printf("pclose error!\n");
-		goto GETERR;
+
+	curl_easy_setopt(curlhandle, CURLOPT_URL, remotepath);
+	curl_easy_setopt(curlhandle, CURLOPT_CONNECTTIMEOUT, timeout);
+	curl_easy_setopt(curlhandle, CURLOPT_HEADERFUNCTION, getcontentlengthfunc);
+	curl_easy_setopt(curlhandle, CURLOPT_HEADERDATA, &filesize);
+	curl_easy_setopt(curlhandle, CURLOPT_RESUME_FROM_LARGE, use_resume?local_file_len:0);
+	curl_easy_setopt(curlhandle, CURLOPT_SSL_VERIFYPEER, 0);
+	curl_easy_setopt(curlhandle, CURLOPT_SSL_VERIFYHOST, 0);
+	curl_easy_setopt(curlhandle, CURLOPT_SSLVERSION, CURL_SSLVERSION_TLSv1); 
+	curl_easy_setopt(curlhandle, CURLOPT_WRITEDATA, f);
+	curl_easy_setopt(curlhandle, CURLOPT_WRITEFUNCTION, wirtefunc);
+	curl_easy_setopt(curlhandle, CURLOPT_NOPROGRESS, 1);
+	curl_easy_setopt(curlhandle, CURLOPT_VERBOSE, 1);
+
+	r = curl_easy_perform(curlhandle);
+	fclose(f);
+
+	if (r == CURLE_OK)
+		return 1;
+	else {
+		fprintf(stderr, "%s\n", curl_easy_strerror(r));
+		return 0;
 	}
-	if ( bytes_read == 0 )
-	{
-		printf("bytes_read == 0\n");
-		goto GETERR;
-	}	
-	match = strstr(buffer, download_type);
-	if (match == NULL)
-	{
-		printf("NO Keyword %s To Find!\n", download_type);
-		goto GETERR;
+}
+
+int weather()
+{
+	int download;
+	char w[]="/tmp/weather.json";
+	char url[100];
+	char url1[]="https://api.seniverse.com/v3/weather/now.json?key=5fjwjirm6bzk95rx&location";
+	char url2[]="language=zh-Hans&unit=c";
+	char s1[10],s2[10],s3[10];
+	json_object *s4=NULL, *s5=NULL, *s6=NULL;
+	FILE *fpw;
+	json_object *obj = NULL;
+	json_object *obj0 = NULL;
+	json_object *obj1 = NULL;
+	json_object *objl = NULL;
+	json_object *objn = NULL;
+	time_t tmpcal_ptr;
+	FILE *fptime, *fpdate;
+	struct tm *tmp_ptr = NULL;
+	time(&tmpcal_ptr);
+	tmp_ptr = localtime(&tmpcal_ptr);
+
+	struct sysinfo info;
+	sysinfo(&info);
+	timer=(int)info.uptime;
+	CURL *curlhandle = NULL;
+	curl_global_init(CURL_GLOBAL_ALL);
+	curlhandle = curl_easy_init();
+	if(nvram_get_int("link_internet") != 2)
+		goto wan_down;
+	if(timers==0 || timers < timer || !check_if_file_exist(w)){
+		timers=timer;
+		timers=timer+3600;
+		unlink(w);
+
+		if(nvram_get("k3_city"))
+			snprintf(url, sizeof(url), "%s=%s&%s", url1, nvram_get("k3_city"), url2);
+		else
+			snprintf(url, sizeof(url), "%s=ip&%s", url1, url2);
+		curl_download_file(curlhandle , url,w,8,3);
 	}
-	sscanf(match, "RX bytes:%d", download_speed);
-	match = strstr(buffer, upload_type);
-	if (match == NULL)
-	{
-		printf("No Keyword %s To Find!\n", upload_type);
-		goto GETERR;
+	obj = json_object_from_file(w);
+	if(json_object_object_get_ex(obj, "status_code", &obj0))//server is under DDoS attack
+		goto wan_down;
+	json_object_object_get_ex(obj,"results", &obj0);
+	if(json_object_array_length(obj0) > 0){
+		obj1=json_object_array_get_idx(obj0,0);//only one
+		json_object_object_get_ex(obj1,"location", &objl);
+		json_object_object_get_ex(obj1,"now", &objn);
+		json_object_object_get_ex(objl,"name", &s4);
+		json_object_object_get_ex(objn,"temperature", &s5);
+		json_object_object_get_ex(objn,"code", &s6);
+		strlcpy(s1, json_object_get_string(s4), sizeof(s1));
+		strlcpy(s2, json_object_get_string(s5), sizeof(s2));
+		strlcpy(s3, json_object_get_string(s6), sizeof(s3));
+		json_object_put(obj);
+		json_object_put(obj0);
+		json_object_put(obj1);
+		json_object_put(objl);
+		json_object_put(objn);
+		goto weather_done;
 	}
-	sscanf(match, "TX bytes:%d", upload_speed);
+wan_down:
+	strlcpy(s1, "Unknow", sizeof(s1));
+	strlcpy(s2, "0", sizeof(s2));
+	strlcpy(s3, "0", sizeof(s3));
+weather_done:
+	if ((fpw = fopen("/tmp/k3screenctrl/weather.sh", "w"))){
+		fchmod(fileno(fpw), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fpw, "#!/bin/sh\n");
+		fprintf(fpw, "echo %s\n", s1);
+		fprintf(fpw, "echo %s\n", s2);
+		fprintf(fpw, "echo %d-%d-%d\n", (1900+tmp_ptr->tm_year), (1+tmp_ptr->tm_mon), tmp_ptr->tm_mday);
+		fprintf(fpw, "echo %02d:%02d\n", tmp_ptr->tm_hour, tmp_ptr->tm_min);
+		fprintf(fpw, "echo %s\n", s3);
+		fprintf(fpw, "echo %d\n", tmp_ptr->tm_wday);
+		fprintf(fpw, "echo 0\n");
+		fclose(fpw);
+	}
+	curl_easy_cleanup(curlhandle);
+	curl_global_cleanup();
 	return 0;
 }
+
+void basic()
+{
+	FILE *fpb;
+	if ((fpb = fopen("/tmp/k3screenctrl/basic.sh", "w"))){
+		fchmod(fileno(fpb), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fpb, "#!/bin/sh\n");
+		if(nvram_get("et2macaddr"))
+			fprintf(fpb, "MAC_ADDR=\"%s\"\n", nvram_get("et2macaddr"));
+		else
+			fprintf(fpb, "MAC_ADDR=\"%s\"\n", nvram_get("et0macaddr"));
+		if(swmode==1)
+			fprintf(fpb, "FW_VERSION=\"%s_%s\"\n", nvram_get("buildno"), nvram_get("extendno"));
+		else
+			fprintf(fpb, "FW_VERSION=\"AP:%s\"\n", nvram_get("lan_ipaddr"));
+		if(nvram_get("hd_version"))
+			fprintf(fpb, "hd_version=%s\n", nvram_get("hd_version"));
+		else
+			fprintf(fpb, "hd_version=A1/A2\n");
+		fprintf(fpb, "echo K3\n");
+		fprintf(fpb, "echo $hd_version\n");
+		fprintf(fpb, "echo $FW_VERSION\n");
+		fprintf(fpb, "echo $FW_VERSION\n");
+		fprintf(fpb, "echo $MAC_ADDR\n");
+		fclose(fpb);
+	}
+}
+
+unsigned int get_wifi_clients(int unit, int querytype)
+{
+	char *name, prefix[8];
+	struct maclist *clientlist;
+	int max_sta_count, maclist_size;
+	int val, count = 0, subunit;
+#ifdef RTCONFIG_WIRELESSREPEATER
+	int isrepeater = 0;
+#endif
+
+	/* buffers and length */
+	max_sta_count = 128;
+	maclist_size = sizeof(clientlist->count) + max_sta_count * sizeof(struct ether_addr);
+	clientlist = malloc(maclist_size);
+
+	if (!clientlist)
+		return 0;
+
+	for (subunit = 0; subunit < 4; subunit++) {
+#ifdef RTCONFIG_WIRELESSREPEATER
+		if ((nvram_get_int("sw_mode") == SW_MODE_REPEATER) && (unit == nvram_get_int("wlc_band"))) {
+			if (subunit == 0)
+				continue;
+			else if (subunit == 1)
+				isrepeater = 1;
+			else
+				break;
+		}
+#endif
+
+		if (subunit == 0)
+			snprintf(prefix, sizeof(prefix), "wl%d_", unit);
+		else
+			snprintf(prefix, sizeof(prefix), "wl%d.%d_", unit, subunit);
+
+		name = nvram_pf_safe_get(prefix, "ifname");
+		if (*name == '\0') continue;
+
+		if (subunit == 0) {
+			wl_ioctl(name, WLC_GET_RADIO, &val, sizeof(val));
+			if (val == 1) {
+				count = -1;	// Radio is disabled
+				goto exit;
+			}
+		}
+
+		if ((subunit > 0) &&
+#ifdef RTCONFIG_WIRELESSREPEATER
+			!isrepeater &&
+#endif
+			!nvram_pf_get_int(prefix, "bss_enabled"))
+				continue;	// Guest interface disabled
+
+		switch (querytype) {
+			case SI_WL_QUERY_AUTHE:
+				strcpy((char*)clientlist, "authe_sta_list");
+				if (!wl_ioctl(name, WLC_GET_VAR, clientlist, maclist_size))
+					count += clientlist->count;
+				break;
+			case SI_WL_QUERY_AUTHO:
+				strcpy((char*)clientlist, "autho_sta_list");
+				if (!wl_ioctl(name, WLC_GET_VAR, clientlist, maclist_size))
+					count += clientlist->count;
+				break;
+			case SI_WL_QUERY_ASSOC:
+				clientlist->count = max_sta_count;
+				if (!wl_ioctl(name, WLC_GET_ASSOCLIST, clientlist, maclist_size))
+					count += clientlist->count;
+				break;
+		}
+	}
+
+exit:
+	free(clientlist);
+	return count;
+}
+
+void wifi()
+{
+	char *PWD_2G = NULL;
+	char *PWD_5G = NULL;
+#if 0
+	int ENABLED_VISITOR = 0;
+	char SSID_GUEST[32], PWD_GUEST[64];
+
+	int guest_2g[3] = {0}, guest_5g[3] = {0};
+	int i;
+	char tmp[18];
+#endif
+	FILE *fp = NULL;
+	if(nvram_get("screen_2G5G_pwd_en") && nvram_get_int("screen_2G5G_pwd_en")==1)
+	{
+		if (strcmp(nvram_get("wl0_auth_mode_x"), "open"))
+		{
+			PWD_2G = nvram_get("wl0_wpa_psk");
+		}
+		else
+		{
+			PWD_2G = "";
+		}
+		if (strcmp(nvram_get("wl1_auth_mode_x"), "open"))
+		{
+			PWD_5G = nvram_get("wl1_wpa_psk");
+		}
+		else
+		{
+			PWD_5G = "";
+		}
+	}
+	else
+	{
+		PWD_2G = "********";
+		PWD_5G = "********";
+	}
+#if 0		
+	bzero(tmp, sizeof(tmp));
+	for (i = 1; i <= 3; i++)
+	{
+		snprintf(tmp, sizeof(tmp), "wl0.%d_bss_enabled", i);
+		guest_2g[i] = nvram_get_int(tmp);
+		snprintf(tmp, sizeof(tmp), "wl1.%d_bss_enabled", i);
+		guest_5g[i] = nvram_get_int(tmp);
+	}
+
+	ENABLED_VISITOR = guest_2g[1] | guest_2g[2] | guest_2g[3] | guest_5g[1] | guest_5g[2] | guest_5g[3];
+
+	bzero(SSID_GUEST, sizeof(SSID_GUEST));
+	bzero(PWD_GUEST, sizeof(PWD_GUEST));
+	for (i = 1; i <= 3; i++)
+	{
+		if (guest_2g[i])
+		{
+			bzero(tmp, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "wl0.%d_ssid", i);
+			strlcpy(SSID_GUEST, nvram_get(tmp), sizeof(SSID_GUEST));
+			bzero(tmp, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "wl0.%d_auth_mode_x", i);
+			if (strcmp(nvram_get(tmp), "open"))
+			{
+				bzero(tmp, sizeof(tmp));
+				snprintf(tmp, sizeof(tmp), "wl0.%d_wpa_psk", i);
+				strlcpy(PWD_GUEST, nvram_get(tmp), sizeof(PWD_GUEST));
+			}
+			break;
+		}
+		if (guest_5g[i])
+		{
+			bzero(tmp, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "wl1.%d_ssid", i);
+			strlcpy(SSID_GUEST, nvram_get(tmp), sizeof(SSID_GUEST));
+			bzero(tmp, sizeof(tmp));
+			snprintf(tmp, sizeof(tmp), "wl1.%d_auth_mode_x", i);
+			if (strcmp(nvram_get(tmp), "open"))
+			{
+				bzero(tmp, sizeof(tmp));
+				snprintf(tmp, sizeof(tmp), "wl1.%d_wpa_psk", i);
+				strlcpy(PWD_GUEST, nvram_get(tmp), sizeof(PWD_GUEST));
+			}
+			break;
+		}
+	}
+	if(!nvram_get("screen_guest_pwd_en") || nvram_get_int("screen_guest_pwd_en")!=1)
+		strlcpy(PWD_GUEST, "********", sizeof(PWD_GUEST));
+#endif
+	if ((fp = fopen("/tmp/k3screenctrl/wifi.sh", "w"))){
+		fchmod(fileno(fp), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fp, "#!/bin/sh\n");
+		fprintf(fp, "echo %d\n", nvram_get_int("smart_connect_x"));
+		fprintf(fp, "echo %s\n", nvram_get("wl0_ssid"));
+		fprintf(fp, "echo \"%s\"\n", PWD_2G);
+		fprintf(fp, "echo %d\n", nvram_get_int("wl0_bss_enabled"));
+		fprintf(fp, "echo %d\n", get_wifi_clients(0,SI_WL_QUERY_ASSOC));
+		fprintf(fp, "echo %s\n", nvram_get("wl1_ssid"));
+		fprintf(fp, "echo \"%s\"\n", PWD_5G);
+		fprintf(fp, "echo %d\n", nvram_get_int("wl1_bss_enabled"));
+		fprintf(fp, "echo %d\n", get_wifi_clients(1,SI_WL_QUERY_ASSOC));
+#if 0
+		fprintf(fp, "echo %s\n", SSID_GUEST);
+		fprintf(fp, "echo %s\n", PWD_GUEST);
+		fprintf(fp, "echo %d\n", ENABLED_VISITOR);
+#else
+		fprintf(fp, "echo SSID_GUEST\n");
+		fprintf(fp, "echo \"********\"\n");
+		fprintf(fp, "echo 0\n");
+#endif
+		fprintf(fp, "echo 0\n");
+		fclose(fp);
+	}
+}
+void port()
+{
+	FILE *fpp;
+	int ports[4];
+	int status[4];
+	int i, lret=0, mask;
+	char *usb =nvram_get("usb_path1_fs_path0");
+	ports[0]=3; ports[1]=1; ports[2]=0; ports[3]=2;
+
+	for (i=0; i<4; i++)
+	{
+		mask = 0;
+		mask |= 0x0001<<ports[i];
+		if (get_phy_status(mask)!=0)
+			status[i]=1;
+	}
+	if(usb!=NULL && strlen(usb)>1)
+		lret=1;
+	if ((fpp = fopen("/tmp/k3screenctrl/port.sh", "w"))){
+		fchmod(fileno(fpp), S_IRUSR | S_IWUSR | S_IXUSR | S_IRGRP | S_IWGRP | S_IXGRP | S_IROTH | S_IWOTH | S_IXOTH);
+		fprintf(fpp, "#!/bin/sh\n");
+		fprintf(fpp, "echo %d\n",status[1]);
+		fprintf(fpp, "echo %d\n",status[2]);
+		fprintf(fpp, "echo %d\n",status[3]);
+		fprintf(fpp, "echo %d\n",status[0]);
+		fprintf(fpp, "echo %d\n",lret);
+		fclose(fpp);
+	}
+}
+static void check_K3screend_exit(int sig)
+{
+	syslog(LOG_ERR, "K3screend: exit\n");
+	exit(0);
+}
+
+void check_K3screend(int sig)
+{
+	FILE * pip;
+	basic();
+	wifi();
+	wan();
+	port();
+	host();
+	weather();
+	memset(arpbuffer, 0, sizeof(arpbuffer));
+	if ((pip=popen("cat /proc/net/arp", "r")) == NULL ){
+		syslog(LOG_ERR, "K3screend: can't open /proc/net/arp\n");
+		return;//bug?
+	}
+	fread(arpbuffer, 1, sizeof(arpbuffer), pip);
+	pclose(pip);
+	alarm(10);
+}
+
+static void
+alarmtimer(unsigned long sec, unsigned long usec)
+{
+	itv.it_value.tv_sec = sec;
+	itv.it_value.tv_usec = usec;
+	itv.it_interval.tv_sec = 1;
+	itv.it_interval.tv_usec = usec;
+	setitimer(ITIMER_REAL, &itv, NULL);
+}
+
+int main(int argc, char * argv[])
+{
+	sigset_t sigs_to_catch;
+	swmode=nvram_get_int("sw_mode");//1=router,2=ap,3=rp or aimesh,4=mb
+	sigemptyset(&sigs_to_catch);
+	sigaddset(&sigs_to_catch, SIGTERM);
+	sigaddset(&sigs_to_catch, SIGALRM);
+	sigprocmask(SIG_UNBLOCK, &sigs_to_catch, NULL);
+	signal(SIGTERM, check_K3screend_exit);
+	signal(SIGALRM, check_K3screend);
+	syslog(LOG_ERR, "K3screend: start\n");
+	alarm(1);
+	while(1)
+		pause();
+	return 0;
+}
+
