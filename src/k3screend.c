@@ -31,6 +31,7 @@
 #include <rtstate.h>
 #include <wlioctl.h>
 #include <wlutils.h>
+#include <auth_lite.h>
 
 #define SI_WL_QUERY_ASSOC 1
 #define SI_WL_QUERY_AUTHE 2
@@ -304,10 +305,10 @@ int weather()
 {
 	int download;
 	char w[]="/tmp/weather.json";
-	char url[100];
-	char url1[]="https://api.seniverse.com/v3/weather/now.json?key=5fjwjirm6bzk95rx&location";
+	char url[200];
+	char url1[]="https://api.seniverse.com/v3/weather/now.json";
 	char url2[]="language=zh-Hans&unit=c";
-	char s1[10],s2[10],s3[10];
+	char s1[10],s2[10],s3[10],s9[64],s7[128],s8[64],s10[64];
 	json_object *s4=NULL, *s5=NULL, *s6=NULL;
 	FILE *fpw;
 	json_object *obj = NULL;
@@ -320,10 +321,13 @@ int weather()
 	struct tm *tmp_ptr = NULL;
 	time(&tmpcal_ptr);
 	tmp_ptr = localtime(&tmpcal_ptr);
-
+	time_t timestamp = time(NULL);
 	struct sysinfo info;
 	sysinfo(&info);
 	timer=(int)info.uptime;
+	memset(s7,'\0',sizeof(s7));
+	memset(s8,'\0',sizeof(s8));
+	memset(s9,'\0',sizeof(s9));
 	CURL *curlhandle = NULL;
 	curl_global_init(CURL_GLOBAL_ALL);
 	curlhandle = curl_easy_init();
@@ -333,11 +337,16 @@ int weather()
 		timers=timer;
 		timers=timer+3600;
 		unlink(w);
-
+		sprintf(s9,"%ld", timestamp);
+		auth_key(s9, s8);
+		sprintf(s10,"ts=%ld&ttl=300&uid=%s", timestamp, s8);
+		encrypt_key(s10, s7);
+		
 		if(nvram_get("k3_city"))
-			snprintf(url, sizeof(url), "%s=%s&%s", url1, nvram_get("k3_city"), url2);
+			snprintf(url, sizeof(url), "%s?location=%s&%s&%s&sig=%s", url1, nvram_get("k3_city"), url2, s10, s7);
 		else
-			snprintf(url, sizeof(url), "%s=ip&%s", url1, url2);
+			snprintf(url, sizeof(url), "%s?location=ip&%s&%s&sig=%s", url1, url2, s10, s7);
+		//printf("\turl=%s\n", url);
 		curl_download_file(curlhandle , url,w,8,3);
 	}
 	obj = json_object_from_file(w);
