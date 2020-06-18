@@ -221,6 +221,7 @@ void host()
 			if (!strcmp(name, "*") || !strcmp(name, "?") || !strcmp(name, ""))
 				strcpy(name, " Unknown");
 			l=find_logo(hwaddr);
+			strcat(buffer, "echo ");
 			strcat(buffer, name);
 			//strcat(buffer, "\n0\n0\n0\n");
 			strcat(buffer, "\necho 0\necho 0\n");
@@ -335,7 +336,7 @@ int weather()
 		goto wan_down;
 	if(timers==0 || timers < timer || !check_if_file_exist(w)){
 		timers=timer;
-		timers=timer+3600;
+		timers=timer+7200;
 		unlink(w);
 		sprintf(s9,"%ld", timestamp);
 		auth_key(s9, s8);
@@ -621,7 +622,9 @@ void port()
 	{
 		mask = 0;
 		mask |= 0x0001<<ports[i];
-		if (get_phy_status(mask)!=0)
+		if (get_phy_status(mask)==0)
+			status[i]=0;
+		else
 			status[i]=1;
 	}
 	if(usb!=NULL && strlen(usb)>1)
@@ -676,6 +679,9 @@ int main(int argc, char * argv[])
 {
 	sigset_t sigs_to_catch;
 	swmode=nvram_get_int("sw_mode");//1=router,2=ap,3=rp or aimesh,4=mb
+	time_t ts = time(NULL);
+	if (ts < 1591016709)//waiting for time sync
+		check_K3screend_exit(0);
 	sigemptyset(&sigs_to_catch);
 	sigaddset(&sigs_to_catch, SIGTERM);
 	sigaddset(&sigs_to_catch, SIGALRM);
